@@ -41,7 +41,7 @@ loss_fn = torch.nn.CrossEntropyLoss()
 
 
 # ====== 3. 訓練循環 ======
-for epoch in range(3000):  # 訓練 3000 個 epoch（訓練輪次）
+for epoch in range(30000):  # 訓練 3000 個 epoch（訓練輪次）
     
     # 準備輸入和目標
     # x: 輸入序列（除了最後一個詞）

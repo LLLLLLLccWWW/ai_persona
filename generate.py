@@ -51,7 +51,7 @@ def generate(start="I", length=200):
 
         # === 溫度採樣 (Temperature Sampling) ===
         # 溫度參數控制生成的隨機性
-        temperature = 0.8
+        temperature = 0.9
         # temperature < 1: 更保守，偏好高機率的詞
         # temperature = 1: 標準分布
         # temperature > 1: 更隨機，給低機率詞更多機會
@@ -62,7 +62,7 @@ def generate(start="I", length=200):
 
         # === Top-k 採樣 ===
         # 只從機率最高的 k 個詞中選擇
-        k = 20
+        k = 50
         # torch.topk(input, k): 返回最大的 k 個值及其索引
         values, indices = torch.topk(p, k)
         # values: 前 k 大的機率值
