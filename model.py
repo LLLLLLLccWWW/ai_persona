@@ -24,7 +24,7 @@ class SelfAttention(nn.Module):
     原理：使用 Query、Key、Value 三個矩陣計算注意力權重
     """
     
-    def __init__(self, d):
+    def __init__(self, d, num_heads=8):
         """
         初始化自注意力層
         
@@ -33,12 +33,21 @@ class SelfAttention(nn.Module):
                     例如 d=512 表示每個詞是一個 512 維的向量
         """
         super().__init__()
+
+        # 確保可以整除
+        assert d % num_heads == 0, f"d_model ({d}) 必須能被 num_heads ({num_heads}) 整除"
         
+        self.d = d
+        self.num_heads = num_heads
+        self.d_k = d // num_heads  # 每個頭的維度
+
         # 創建三個線性轉換層，用於生成 Query, Key, Value
         # nn.Linear(in_features, out_features): 執行線性變換 y = xW^T + b
         self.q = nn.Linear(d, d)  # Query (查詢): "我要找什麼？"
         self.k = nn.Linear(d, d)  # Key (鍵): "我是什麼？"
         self.v = nn.Linear(d, d)  # Value (值): "我的內容是什麼？"
+
+        self.out_proj = nn.Linear(d, d)  # 最終輸出投影層
 
     def forward(self, x):
         """
@@ -60,9 +69,12 @@ class SelfAttention(nn.Module):
         k = self.k(x)  # Key:   (B, T, C) → (B, T, C)
         v = self.v(x)  # Value: (B, T, C) → (B, T, C)
 
+        q = q.view(B, T, self.num_heads, self.d_k).transpose(1, 2)
+        k = k.view(B, T, self.num_heads, self.d_k).transpose(1, 2)
+        v = v.view(B, T, self.num_heads, self.d_k).transpose(1, 2)
         # 步驟 2: 計算注意力分數 (Attention Scores)
         # scores[i,j] 表示位置 i 對位置 j 的注意力程度
-        scores = q @ k.transpose(-2, -1) / math.sqrt(C)
+        scores = q @ k.transpose(-2, -1) / math.sqrt(self.d_k)
         # @ 是矩陣乘法
         # k.transpose(-2, -1) 將最後兩個維度轉置: (B, T, C) → (B, C, T)
         # 結果形狀: (B, T, T)
@@ -71,7 +83,7 @@ class SelfAttention(nn.Module):
         # 步驟 3: 因果遮罩 (Causal Mask)
         # 目的：防止模型"偷看"未來的詞
         # 例如：預測第 3 個詞時，只能看到第 1、2 個詞，不能看到第 4、5... 個詞
-        mask = torch.tril(torch.ones(T, T)).to(x.device)
+        mask = torch.tril(torch.ones(T, T, device=x.device)).view(1, 1, T, T)
         # torch.tril() 生成下三角矩陣:
         # [[1, 0, 0],
         #  [1, 1, 0],
@@ -88,6 +100,15 @@ class SelfAttention(nn.Module):
         out = attn @ v
         # 形狀: (B, T, T) @ (B, T, C) → (B, T, C)
         # 每個位置都是其他位置 Value 的加權平均
+
+        # 步驟 6: 合併所有頭
+        # (B, num_heads, T, d_k) → (B, T, num_heads, d_k) → (B, T, d)
+        out = out.transpose(1, 2).contiguous().view(B, T, self.d)
+        # .contiguous() 確保記憶體連續，view() 才能正確運作
+
+        # 步驟 7: 輸出投影（讓模型學習整合多頭資訊）
+        out = self.out_proj(out)
+        # 形狀維持: (B, T, d)
         
         return out
 

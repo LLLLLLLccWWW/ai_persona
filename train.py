@@ -71,7 +71,7 @@ block_size = 256
 # batch_size: 每次訓練使用的序列數量
 # 太小：訓練不穩定，收斂慢
 # 太大：記憶體消耗大，可能裝不下
-batch_size = 64
+batch_size = 128
 
 # device: 使用 GPU 或 CPU
 # GPU (cuda) 比 CPU 快 10-100 倍
@@ -161,7 +161,7 @@ def get_batch():
 print("\n=== 開始訓練 ===")
 
 num_epochs = 5000  # 訓練輪數
-print_interval = 500  # 每多少輪印出一次損失
+print_interval = 1000  # 每多少輪印出一次損失
 
 for epoch in range(num_epochs):
     
