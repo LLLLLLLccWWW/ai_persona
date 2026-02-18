@@ -105,7 +105,7 @@ print(f"模型參數量: {total_params:,} ({total_params/1e6:.2f}M)")
 # lr (learning rate): 學習率，控制參數更新的步長
 #   - 太大：訓練不穩定，可能發散
 #   - 太小：訓練太慢，可能卡在局部最優
-opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
+opt = torch.optim.AdamW(model.parameters(), lr=3e-4)
 
 # 損失函數：交叉熵損失 (Cross Entropy Loss)
 # 用於多分類問題，衡量預測分布和真實分布的差異
@@ -201,6 +201,9 @@ for epoch in range(num_epochs):
     # 4.2 計算梯度
     # 自動計算所有參數對損失的梯度（偏導數）
     loss.backward()
+
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    # 梯度裁剪：防止梯度爆炸，將梯度的范數限制在 1.0 以內
     
     # 4.3 更新參數
     # 使用計算出的梯度更新模型參數

@@ -51,7 +51,7 @@ class SelfAttention(nn.Module):
 
         # Dropout：訓練時隨機關閉 10% 的神經元，防止過擬合
         # model.eval() 後會自動關閉，不影響生成
-        self.attn_dropout = nn.Dropout(0.1)  # 注意力權重的 dropout，防止過擬合
+        self.attn_dropout = nn.Dropout(0.2)  # 注意力權重的 dropout，防止過擬合
 
     def forward(self, x):
         """
@@ -159,7 +159,7 @@ class TransformerBlock(nn.Module):
         self.norm2 = nn.LayerNorm(d)  # 用於前饋網路後
 
         # Dropout：前饋網路輸出後也加 Dropout
-        self.ff_dropout = nn.Dropout(0.1)  # 前饋網路的 dropout，防止過擬合
+        self.ff_dropout = nn.Dropout(0.2)  # 前饋網路的 dropout，防止過擬合
     def forward(self, x):
         """
         前向傳播
