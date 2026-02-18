@@ -159,7 +159,7 @@ def generate(start="I", length=200):
         # 只從機率最高的 k 個詞中選擇
         # 好處：避免選到機率極低的奇怪詞
         
-        k = 50
+        k = 100
         # 取出機率最高的 k 個詞
         # torch.topk(input, k) 返回最大的 k 個值及其索引
         top_probs, top_indices = torch.topk(probs, k, dim=-1)

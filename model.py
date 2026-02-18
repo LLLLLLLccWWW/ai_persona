@@ -49,6 +49,10 @@ class SelfAttention(nn.Module):
 
         self.out_proj = nn.Linear(d, d)  # 最終輸出投影層
 
+        # Dropout：訓練時隨機關閉 10% 的神經元，防止過擬合
+        # model.eval() 後會自動關閉，不影響生成
+        self.attn_dropout = nn.Dropout(0.1)  # 注意力權重的 dropout，防止過擬合
+
     def forward(self, x):
         """
         前向傳播：計算自注意力
@@ -95,6 +99,7 @@ class SelfAttention(nn.Module):
         attn = torch.softmax(scores, dim=-1)
         # softmax 將分數轉換為機率分布（總和為 1）
         # 形狀: (B, T, T)
+        attn = self.attn_dropout(attn)
         
         # 步驟 5: 用注意力權重對 Value 加權求和
         out = attn @ v
@@ -153,6 +158,8 @@ class TransformerBlock(nn.Module):
         self.norm1 = nn.LayerNorm(d)  # 用於自注意力後
         self.norm2 = nn.LayerNorm(d)  # 用於前饋網路後
 
+        # Dropout：前饋網路輸出後也加 Dropout
+        self.ff_dropout = nn.Dropout(0.1)  # 前饋網路的 dropout，防止過擬合
     def forward(self, x):
         """
         前向傳播
@@ -173,7 +180,7 @@ class TransformerBlock(nn.Module):
         # x + self.attn(x) 是殘差連接，幫助梯度流動
         
         # 第二個子層: 前饋網路 + 殘差連接 + 層歸一化
-        x = self.norm2(x + self.ff(x))
+        x = self.norm2(x + self.ff_dropout(self.ff(x)))
         
         return x
 

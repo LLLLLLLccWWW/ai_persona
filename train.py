@@ -160,7 +160,7 @@ def get_batch():
 
 print("\n=== 開始訓練 ===")
 
-num_epochs = 5000  # 訓練輪數
+num_epochs = 50000  # 訓練輪數
 print_interval = 1000  # 每多少輪印出一次損失
 
 for epoch in range(num_epochs):
