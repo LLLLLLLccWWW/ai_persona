@@ -53,7 +53,7 @@ print(f"使用設備: {device}")
 # 創建模型架構（必須與訓練時完全相同）
 model = MiniGPT(
     vocab_size=vocab_size,
-    embed=512,           # 嵌入維度
+    embed=128,           # 嵌入維度
     block_size=block_size
 ).to(device)
 
@@ -159,7 +159,7 @@ def generate(start="I", length=200):
         # 只從機率最高的 k 個詞中選擇
         # 好處：避免選到機率極低的奇怪詞
         
-        k = 100
+        k = 50  # 只從前 50 個詞中選擇
         # 取出機率最高的 k 個詞
         # torch.topk(input, k) 返回最大的 k 個值及其索引
         top_probs, top_indices = torch.topk(probs, k, dim=-1)
