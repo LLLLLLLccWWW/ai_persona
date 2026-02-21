@@ -51,7 +51,7 @@ class SelfAttention(nn.Module):
 
         # Dropout：訓練時隨機關閉 10% 的神經元，防止過擬合
         # model.eval() 後會自動關閉，不影響生成
-        self.attn_dropout = nn.Dropout(0.7)  # 注意力權重的 dropout，防止過擬合
+        self.attn_dropout = nn.Dropout(0.3)  # 注意力權重的 dropout，防止過擬合
 
     def forward(self, x):
         """
@@ -150,7 +150,7 @@ class TransformerBlock(nn.Module):
             nn.Linear(d, d * 4),    # 擴展層: d → 4d
             nn.ReLU(),              # 激活函數: ReLU(x) = max(0, x)
             nn.Linear(d * 4, d),     # 壓縮層: 4d → d
-            nn.Dropout(0.7)          # 前饋網路的 dropout，防止過擬合
+            nn.Dropout(0.3)          # 前饋網路的 dropout，防止過擬合
         )
         
         # 層歸一化 (Layer Normalization)
@@ -160,7 +160,7 @@ class TransformerBlock(nn.Module):
         self.norm2 = nn.LayerNorm(d)  # 用於前饋網路後
 
         # Dropout：前饋網路輸出後也加 Dropout
-        self.ff_dropout = nn.Dropout(0.7)  # 前饋網路的 dropout，防止過擬合
+        self.ff_dropout = nn.Dropout(0.3)  # 前饋網路的 dropout，防止過擬合
     def forward(self, x):
         """
         前向傳播
@@ -231,7 +231,7 @@ class MiniGPT(nn.Module):
         # 例如：第 1 個位置 → 位置向量 1，第 2 個位置 → 位置向量 2
         self.pos = nn.Embedding(block_size, embed)
 
-        self.drop = nn.Dropout(0.7)  # 整體 dropout，防止過擬合
+        self.drop = nn.Dropout(0.2)  # 整體 dropout，防止過擬合
         
         # 3. Transformer 區塊
         # nn.Sequential(*[...]) 將多個層串聯起來
