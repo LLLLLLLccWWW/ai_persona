@@ -7,7 +7,7 @@ from model import MiniGPT
 from collections import Counter
 
 print("=== 載入訓練資料 ===")
-text = open('data/input.txt').read()
+text = open('data/input.txt',encoding='utf-8').read()
 words = text.split()
 
 print(f"原始詞彙表大小: {len(set(words))} 個詞")
@@ -15,7 +15,7 @@ print(f"訓練資料總詞數: {len(words)} 個詞")
 
 # ⭐ 過濾低頻詞
 word_counts = Counter(words)
-min_count = 5 # 最小詞頻，出現次數少於這個值的詞會被過濾掉
+min_count = 2 # 最小詞頻，出現次數少於這個值的詞會被過濾掉
 vocab = sorted([w for w, count in word_counts.items() if count >= min_count])
 
 # 用 <UNK> 替換低頻詞
@@ -67,9 +67,9 @@ model = MiniGPT(
 total_params = sum(p.numel() for p in model.parameters())
 print(f"模型參數量: {total_params:,} ({total_params/1e6:.2f}M)")
 
-opt = torch.optim.AdamW(model.parameters(), lr=5e-4, weight_decay=0.01)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=50000)
-loss_fn = torch.nn.CrossEntropyLoss()
+opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=0.01)
+# scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=50000)
+loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
 
 def get_batch(split='train'):
     data = train_data if split == 'train' else val_data
@@ -79,7 +79,7 @@ def get_batch(split='train'):
     return x, y
 
 print("\n=== 開始訓練 ===")
-num_epochs = 50000
+num_epochs = 100000
 print_interval = 500
 eval_interval = 1000
 eval_iters = 50
@@ -115,7 +115,7 @@ for epoch in range(num_epochs):
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     opt.step()
-    scheduler.step()
+    # scheduler.step()
     
     if epoch % eval_interval == 0:
         losses = estimate_loss()
