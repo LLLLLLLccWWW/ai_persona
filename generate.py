@@ -17,6 +17,8 @@ parser.add_argument('--vocab', type=str, default='vocab.pkl', help='詞彙表 pi
 parser.add_argument('--length', type=int, default=200, help='最大生成 token 數')
 parser.add_argument('--temperature', type=float, default=0.8, help='採樣溫度')
 parser.add_argument('--top_k', type=int, default=50, help='採樣時保留前 k 個候選')
+parser.add_argument('--repeat_penalty', type=float, default=1.3, help='重複詞懲罰強度（>1 懲罰越重，建議 1.1~1.5）')
+parser.add_argument('--no_repeat_ngram', type=int, default=4, help='禁止重複出現的 n-gram 長度（0 為關閉）')
 parser.add_argument('--use_tokenizer', action='store_true', help='使用 tokenizer 進行編碼/解碼')
 parser.add_argument('--tokenizer_path', type=str, default='tokenizer.json', help='tokenizer 檔案路徑')
 args = parser.parse_args()
@@ -77,6 +79,30 @@ def load_resources():
 # 執行初始化動作，設定全域變數
 vocab, stoi, itos, tokenizer, model, device = load_resources()
 
+def apply_repeat_penalty(logits, generated_ids, penalty):
+    """對已出現過的 token 降低機率"""
+    for token_id in set(generated_ids):
+        if logits[0, token_id] > 0:
+            logits[0, token_id] /= penalty
+        else:
+            logits[0, token_id] *= penalty
+    return logits
+
+def apply_no_repeat_ngram(logits, generated_ids, ngram_size):
+    """禁止已出現過的 n-gram 再次出現"""
+    if ngram_size <= 0 or len(generated_ids) < ngram_size - 1:
+        return logits
+    # 取最近 ngram_size-1 個 token 作為前綴
+    prefix = tuple(generated_ids[-(ngram_size - 1):])
+    # 找出訓練序列中這個前綴後面接過哪些 token
+    banned = set()
+    for i in range(len(generated_ids) - ngram_size + 1):
+        if tuple(generated_ids[i:i + ngram_size - 1]) == prefix:
+            banned.add(generated_ids[i + ngram_size - 1])
+    for token_id in banned:
+        logits[0, token_id] = -float('inf')
+    return logits
+
 def generate(start="I", length=None, temperature=None, top_k=None):
     """生成文字
     這個函式現在會使用 CLI 參數作為預設值，方便在 prompt 時修改行為
@@ -119,8 +145,15 @@ def generate(start="I", length=None, temperature=None, top_k=None):
         with torch.no_grad():
             out = model(x)
         
-        logits = out[:, -1, :]
-        
+        logits = out[:, -1, :].clone()
+
+        # 套用重複懲罰
+        generated_ids = x[0].tolist()
+        if args.repeat_penalty != 1.0:
+            logits = apply_repeat_penalty(logits, generated_ids, args.repeat_penalty)
+        if args.no_repeat_ngram > 0:
+            logits = apply_no_repeat_ngram(logits, generated_ids, args.no_repeat_ngram)
+
         scaled_logits = logits / temperature
         probs = torch.softmax(scaled_logits, dim=-1)
         
@@ -141,16 +174,11 @@ def generate(start="I", length=None, temperature=None, top_k=None):
         result = tokenizer.decode(x[0].tolist())
         return result
     else:
-        generated_words = [itos[i.item()] for i in x[0]]
-        # 將 prompt 詞與續寫詞分離
-        prefix = generated_words[:prompt_len]
-        continuation_words = generated_words[prompt_len:]
-        # 只在續寫部分移除 <UNK>
+        # 直接用原始 prompt 當開頭，避免 block_size 截斷造成 index 跑掉
+        all_words = [itos[i.item()] for i in x[0]]
+        continuation_words = all_words[prompt_len:]
         continuation_words = [w for w in continuation_words if w != '<UNK>']
-        if continuation_words:
-            result = ' '.join(prefix + continuation_words)
-        else:
-            result = ' '.join(prefix)
+        result = (start + ' ' + ' '.join(continuation_words)).strip()
         return result
 
 print("\n=== 開始生成 ===")
