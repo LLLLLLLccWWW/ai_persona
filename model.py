@@ -24,13 +24,14 @@ class SelfAttention(nn.Module):
     原理：使用 Query、Key、Value 三個矩陣計算注意力權重
     """
     
-    def __init__(self, d, num_heads=2):
+    def __init__(self, d, num_heads=2, dropout=0.3):
         """
         初始化自注意力層
         
         參數：
             d (int): 嵌入維度，決定每個詞用多少維度的向量來表示
-                    例如 d=512 表示每個詞是一個 512 維的向量
+            num_heads (int): 注意力頭數
+            dropout (float): 注意力權重的 dropout 比例
         """
         super().__init__()
 
@@ -41,17 +42,15 @@ class SelfAttention(nn.Module):
         self.num_heads = num_heads
         self.d_k = d // num_heads  # 每個頭的維度
 
-        # 創建三個線性轉換層，用於生成 Query, Key, Value
-        # nn.Linear(in_features, out_features): 執行線性變換 y = xW^T + b
-        self.q = nn.Linear(d, d)  # Query (查詢): "我要找什麼？"
-        self.k = nn.Linear(d, d)  # Key (鍵): "我是什麼？"
-        self.v = nn.Linear(d, d)  # Value (值): "我的內容是什麼？"
+        # 線性層生成 Query, Key, Value
+        self.q = nn.Linear(d, d)  
+        self.k = nn.Linear(d, d)  
+        self.v = nn.Linear(d, d)  
 
-        self.out_proj = nn.Linear(d, d)  # 最終輸出投影層
+        self.out_proj = nn.Linear(d, d)
 
-        # Dropout：訓練時隨機關閉 10% 的神經元，防止過擬合
-        # model.eval() 後會自動關閉，不影響生成
-        self.attn_dropout = nn.Dropout(0.3)  # 注意力權重的 dropout，防止過擬合
+        # Dropout for attention
+        self.attn_dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         """
@@ -87,12 +86,13 @@ class SelfAttention(nn.Module):
         # 步驟 3: 因果遮罩 (Causal Mask)
         # 目的：防止模型"偷看"未來的詞
         # 例如：預測第 3 個詞時，只能看到第 1、2 個詞，不能看到第 4、5... 個詞
-        mask = torch.tril(torch.ones(T, T, device=x.device)).view(1, 1, T, T)
+        # 使用 bool mask 並使用 -inf 以避開 half precision overflow
+        mask = torch.tril(torch.ones(T, T, device=x.device, dtype=torch.bool)).view(1, 1, T, T)
         # torch.tril() 生成下三角矩陣:
         # [[1, 0, 0],
         #  [1, 1, 0],
         #  [1, 1, 1]]
-        scores = scores.masked_fill(mask == 0, -1e9)
+        scores = scores.masked_fill(~mask, float('-inf'))
         # 將上三角部分設為 -∞，這樣 softmax 後會變成 0
 
         # 步驟 4: 應用 Softmax 得到注意力權重
@@ -131,36 +131,34 @@ class TransformerBlock(nn.Module):
     這是 Transformer 的核心組件，可以堆疊多個以增加模型深度
     """
     
-    def __init__(self, d):
+    def __init__(self, d, num_heads=2, dropout=0.3):
         """
         初始化 Transformer 區塊
         
         參數：
             d (int): 嵌入維度
+            num_heads (int): 注意力頭數
+            dropout (float): dropout 比例
         """
         super().__init__()
         
         # 子層 1: 自注意力層
-        self.attn = SelfAttention(d)
+        self.attn = SelfAttention(d, num_heads=num_heads, dropout=dropout)
         
         # 子層 2: 前饋神經網路 (Feed-Forward Network, FFN)
-        # 結構: Linear → ReLU → Linear
-        # 維度變化: d → 4d → d (先擴展再壓縮)
         self.ff = nn.Sequential(
-            nn.Linear(d, d * 4),    # 擴展層: d → 4d
-            nn.ReLU(),              # 激活函數: ReLU(x) = max(0, x)
-            nn.Linear(d * 4, d),     # 壓縮層: 4d → d
-            nn.Dropout(0.3)          # 前饋網路的 dropout，防止過擬合
+            nn.Linear(d, d * 4),
+            nn.ReLU(),
+            nn.Linear(d * 4, d),
+            nn.Dropout(dropout)
         )
         
-        # 層歸一化 (Layer Normalization)
-        # 作用：標準化每個樣本的特徵，使訓練更穩定
-        # 公式: y = (x - mean(x)) / std(x) * gamma + beta
-        self.norm1 = nn.LayerNorm(d)  # 用於自注意力後
-        self.norm2 = nn.LayerNorm(d)  # 用於前饋網路後
+        # 層歸一化
+        self.norm1 = nn.LayerNorm(d)
+        self.norm2 = nn.LayerNorm(d)
 
-        # Dropout：前饋網路輸出後也加 Dropout
-        self.ff_dropout = nn.Dropout(0.3)  # 前饋網路的 dropout，防止過擬合
+        # Dropout after FFN
+        self.ff_dropout = nn.Dropout(dropout)
     def forward(self, x):
         """
         前向傳播
@@ -204,47 +202,36 @@ class MiniGPT(nn.Module):
     輸出 (每個位置的詞機率分布)
     """
     
-    def __init__(self, vocab_size, embed=128, block_size=256):
+    def __init__(self, vocab_size, embed=128, block_size=256, num_layers=4, num_heads=2, dropout=0.2):
         """
         初始化 MiniGPT 模型
         
         參數：
             vocab_size (int): 詞彙表大小，有多少個不同的詞
-                             例如: vocab_size=300 表示模型認識 300 個詞
-            embed (int): 嵌入維度，預設 512
-                        每個詞會被轉換成 512 維的向量
+            embed (int): 嵌入維度，預設 128
             block_size (int): 最大序列長度，預設 256
-                             模型一次最多能處理 256 個詞
+            num_layers (int): Transformer block 層數
+            num_heads  (int): 自注意力頭數
+            dropout    (float): dropout 比例，應用於多個子層
         """
         super().__init__()
         self.block_size = block_size
         
         # 1. 詞嵌入層 (Token Embedding)
-        # 作用：將詞的索引（整數）轉換為稠密向量
-        # 例如：詞 "apple" (索引 5) → 512 維向量 [0.1, -0.3, 0.7, ...]
         self.embed = nn.Embedding(vocab_size, embed)
-        # 這會創建一個大小為 (vocab_size, embed) 的查找表
 
         # 2. 位置嵌入層 (Position Embedding)
-        # 作用：為每個位置添加位置信息
-        # 為什麼需要：自注意力本身不知道詞的順序
-        # 例如：第 1 個位置 → 位置向量 1，第 2 個位置 → 位置向量 2
         self.pos = nn.Embedding(block_size, embed)
 
-        self.drop = nn.Dropout(0.2)  # 整體 dropout，防止過擬合
+        self.drop = nn.Dropout(dropout)  # 整體 dropout，防止過擬合
         
         # 3. Transformer 區塊
-        # nn.Sequential(*[...]) 將多個層串聯起來
-        # 這裡堆疊了 4 個 TransformerBlock
-        self.blocks = nn.Sequential(*[TransformerBlock(embed) for _ in range(4)])
+        self.blocks = nn.Sequential(*[TransformerBlock(embed, num_heads=num_heads, dropout=dropout) for _ in range(num_layers)])
         
         # 4. 最終層歸一化
-        # 在輸出前再做一次歸一化，提高穩定性
         self.ln = nn.LayerNorm(embed)
         
         # 5. 輸出層 (Language Model Head)
-        # 作用：將 Transformer 的輸出 (embed 維) 轉換為詞彙表大小的分數
-        # 每個詞會得到一個分數，分數越高表示該詞出現的機率越大
         self.fc = nn.Linear(embed, vocab_size)
 
     def forward(self, x):
